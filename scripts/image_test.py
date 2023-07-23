@@ -83,7 +83,7 @@ def main():
 
 
     dist.barrier()
-    logger.log("sampling complete")
+    logger.log("testing complete")
 
 def create_argparser():
     defaults = dict(
@@ -95,6 +95,7 @@ def create_argparser():
         m_shot=1,
         anomaly_threshold=0.5,
         attak_type='l2_pgd',
+        attack_strength=0.2,
         clip_denoised=True,
         use_ddim=False,
     )
