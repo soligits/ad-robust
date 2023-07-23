@@ -59,12 +59,18 @@ def main():
 
 def create_argparser():
     defaults = dict(
-        data_dir="",
-        schedule_sampler="uniform",
+        data_dir="data/mvtec_anomaly_detection/bottle/train/good",
         lr=1e-4,
+        image_size=256,
+        num_channels=128,
+        num_heads=1,
+        attention_resolutions="16",
+        diffusion_steps=1000,
+        noise_schedule="linear",
+        batch_size=2,
+        schedule_sampler="uniform",
         weight_decay=0.0,
         lr_anneal_steps=0,
-        batch_size=1,
         microbatch=-1,  # -1 disables microbatches
         ema_rate="0.9999",  # comma-separated list of EMA values
         log_interval=10,

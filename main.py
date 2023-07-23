@@ -2,11 +2,9 @@ import torch
 from torch.utils.data import DataLoader
 
 
-from mvtec_ad import MVTecAD
+from ad_utils.mvtec_ad import MVTecAD
 from improved_diffusion.unet import UNetModel
-
-
-
+from ad_utils.transforms import create_input_transform, create_target_transform
 
 
 if __name__ == "__main__":
@@ -19,6 +17,8 @@ if __name__ == "__main__":
     random_state = 42
 
     torch.manual_seed(random_state)
+    transform = create_target_transform()
+    target_transform = create_target_transform()
 
     # load data
     train_dataset = MVTecAD(
