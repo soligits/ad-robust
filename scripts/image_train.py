@@ -59,15 +59,6 @@ def main():
 
 def create_argparser():
     defaults = dict(
-        data_dir="data/mvtec_anomaly_detection/bottle/train/good",
-        lr=1e-4,
-        image_size=256,
-        num_channels=128,
-        num_heads=1,
-        attention_resolutions="16",
-        diffusion_steps=1000,
-        noise_schedule="linear",
-        batch_size=2,
         schedule_sampler="uniform",
         weight_decay=0.0,
         lr_anneal_steps=0,
@@ -80,6 +71,16 @@ def create_argparser():
         fp16_scale_growth=1e-3,
     )
     defaults.update(model_and_diffusion_defaults())
+    defaults.update(dict(
+        data_dir="data/mvtec_anomaly_detection/bottle/train/good",
+        lr=1e-4,
+        image_size=256,
+        num_channels=128,
+        num_heads=1,
+        attention_resolutions="16",
+        diffusion_steps=1000,
+        noise_schedule="linear",
+        batch_size=2,))
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)
     return parser
