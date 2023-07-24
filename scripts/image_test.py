@@ -58,7 +58,7 @@ def main():
         if i >= train_len:
             break
         images = images.to(dist_util.dev())
-        reconstructed_images, losses = arbitrary_shot_reconstruction(
+        reconstructed_images = arbitrary_shot_reconstruction(
             model,
             diffusion,
             images,
@@ -89,7 +89,7 @@ def main():
         labels = labels["y"]
         images = images.to(dist_util.dev())
         labels = labels.to(dist_util.dev())
-        reconstructed_images, losses = arbitrary_shot_reconstruction(
+        reconstructed_images = arbitrary_shot_reconstruction(
             model,
             diffusion,
             images,

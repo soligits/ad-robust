@@ -42,3 +42,5 @@ def reconstruct_image(model, test_image, k, reconstruction_type):
         return model.reconstruct_iterative(test_image, k)
     else:
         raise ValueError("Unknown reconstruction type: {}".format(reconstruction_type))
+    
+

@@ -18,5 +18,5 @@ def arbitrary_shot_reconstruction(
         x_t = diffusion.q_sample(x_0, t, epsilon)
         x_tilda_0 = model(x_t, diffusion._scale_timesteps(t))
         mse = th.mean((x_tilda_0 - x_0) ** 2, dim=(1, 2, 3))
-        return x_tilda_0, mse
+        return x_tilda_0
     
