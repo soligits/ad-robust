@@ -19,21 +19,11 @@ from improved_diffusion.script_util import (
     add_dict_to_argparser,
     args_to_dict,
 )
+from improved_diffusion.resample import create_named_schedule_sampler
 
 from ad_utils.ad_score import anomaly_score
+from ad_utils.reconstruct import arbitrary_shot_reconstruction
 
-
-def arbitrary_shot_reconstruction(model, image, reconstruction_type, attack_type, epsilon, **model_kwargs):
-    if reconstruction_type == 'one_shot':
-        reconstructed_images = diffusion.p_sample_loop(
-            model,
-            image,
-            clip_denoised=args.clip_denoised,
-            model_kwargs=model_kwargs,
-        )
-    elif reconstruction_type == 'iterative':
-        reconstructed_images = iterative_reconstruction(model, image, attack_type, epsilon, **model_kwargs)
-    return reconstructed_images
 
 def main():
     args = create_argparser().parse_args()
@@ -49,6 +39,8 @@ def main():
         dist_util.load_state_dict(args.model_path, map_location="cpu")
     )
     model.to(dist_util.dev())
+    schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
+
     model.eval()
     
     logger.log("creating data loader...")
@@ -64,7 +56,7 @@ def main():
     true_labels = []
     for i, (images, labels) in enumerate(data):
         epsilon = np.normal(0, 1, size=images.shape)   
-        reconstructed_images = arbitrary_shot_reconstruction(model, images, args.recconstruction_type, args.attack_type, epsilon, y=labels)
+        reconstructed_images = arbitrary_shot_reconstruction(model, diffusion, schedule_sampler, images, m_shot=args.m_shot)
         # TODO: add l2_pgd attack
         for image, reconstructed, label in zip(images, reconstructed_images, labels):
             if anomaly_score(image, reconstructed) > args.anomaly_threshold:
@@ -100,6 +92,26 @@ def create_argparser():
         use_ddim=False,
     )
     defaults.update(model_and_diffusion_defaults())
+    defaults.update(
+        dict(
+            data_dir=os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..",
+                "data",
+                "mvtec_anomaly_detection",
+                "bottle",
+                "train",
+                "good",
+            ),
+            image_size=256,
+            num_channels=64,
+            num_heads=1,
+            attention_resolutions="8",
+            diffusion_steps=defaults.k_steps,
+            noise_schedule="linear",
+            batch_size=1,
+        )
+    )
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)
     return parser

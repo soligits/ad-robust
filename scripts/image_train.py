@@ -65,7 +65,7 @@ def create_argparser():
         microbatch=-1,  # -1 disables microbatches
         ema_rate="0.9999",  # comma-separated list of EMA values
         log_interval=10,
-        save_interval=10000,
+        save_interval=3000,
         resume_checkpoint="",
         use_fp16=False,
         fp16_scale_growth=1e-3,
@@ -84,12 +84,13 @@ def create_argparser():
             ),
             lr=1e-4,
             image_size=256,
-            num_channels=128,
+            num_channels=64,
             num_heads=1,
-            attention_resolutions="16",
+            attention_resolutions="8",
             diffusion_steps=1000,
             noise_schedule="linear",
             batch_size=2,
+            lr_anneal_steps=3000,
         )
     )
     parser = argparse.ArgumentParser()
