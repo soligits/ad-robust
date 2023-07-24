@@ -1,15 +1,17 @@
 import os
+import subprocess
 import argparse
 from ad_utils.mvtec_ad import MVTecAD
 
 def preprocess_test_data(root, subset_name):
     data_path = os.path.join(root, subset_name, "test")
+    subprocess.run("chmod -R 755 " + data_path, shell=True)
+
+
     normal_path = os.path.join(data_path, "good")
-    anamoly_paths = [
-        os.path.join(data_path, "broken_large"),
-        os.path.join(data_path, "broken_small"),
-        os.path.join(data_path, "contamination")
-    ]
+    anamoly_paths = os.listdir(data_path)
+    anamoly_paths.remove("good")
+    anamoly_paths = [os.path.join(data_path, anamoly_path) for anamoly_path in anamoly_paths]
 
     # move all normal images to data_path and add 0_ prefix
 
@@ -32,7 +34,7 @@ def preprocess_test_data(root, subset_name):
 
 def create_parser():
     defaults = dict(
-        root=os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "mvtec_anomaly_detection"),
+        root=os.path.join(os.path.dirname(os.path.abspath(__file__)),"..", "data", "mvtec_anomaly_detection"),
         subset_name="",
     )
     parser = argparse.ArgumentParser()

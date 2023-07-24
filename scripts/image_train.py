@@ -1,7 +1,7 @@
 """
 Train a diffusion model on images.
 """
-
+import os
 import argparse
 
 from improved_diffusion import dist_util, logger
@@ -71,16 +71,27 @@ def create_argparser():
         fp16_scale_growth=1e-3,
     )
     defaults.update(model_and_diffusion_defaults())
-    defaults.update(dict(
-        data_dir="data/mvtec_anomaly_detection/bottle/train/good",
-        lr=1e-4,
-        image_size=256,
-        num_channels=128,
-        num_heads=1,
-        attention_resolutions="16",
-        diffusion_steps=1000,
-        noise_schedule="linear",
-        batch_size=2,))
+    defaults.update(
+        dict(
+            data_dir=os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..",
+                "data",
+                "mvtec_anomaly_detection",
+                "bottle",
+                "train",
+                "good",
+            ),
+            lr=1e-4,
+            image_size=256,
+            num_channels=128,
+            num_heads=1,
+            attention_resolutions="16",
+            diffusion_steps=1000,
+            noise_schedule="linear",
+            batch_size=2,
+        )
+    )
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)
     return parser
