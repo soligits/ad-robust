@@ -40,7 +40,6 @@ def main():
         dist_util.load_state_dict(args.model_path, map_location="cpu")
     )
     model.to(dist_util.dev())
-    schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
 
     model.eval()
 
@@ -62,7 +61,6 @@ def main():
         reconstructed_images, losses = arbitrary_shot_reconstruction(
             model,
             diffusion,
-            schedule_sampler,
             images,
             k_step=args.k_steps,
             m_shot=args.m_shot,
@@ -94,7 +92,6 @@ def main():
         reconstructed_images, losses = arbitrary_shot_reconstruction(
             model,
             diffusion,
-            schedule_sampler,
             images,
             k_step=args.k_steps,
             m_shot=args.m_shot,
@@ -144,7 +141,6 @@ def create_argparser():
             diffusion_steps=1000,
             noise_schedule="linear",
             batch_size=1,
-            schedule_sampler="uniform",
         )
     )
     parser = argparse.ArgumentParser()
