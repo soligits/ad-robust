@@ -22,5 +22,4 @@ python ./scripts/image_train.py --data_dir path/to/train/good
 
 ## test
 ```
-python ./scripts/image_test.py --data_dir path/to/test --model_path path/to/saved/model
 ```

@@ -91,10 +91,10 @@ def main():
 def create_argparser():
     defaults = dict(
         clip_denoised=True,
-        num_samples=10000,
-        batch_size=16,
+        num_samples=1,
+        batch_size=1,
         use_ddim=False,
-        model_path="",
+        model_path="/home/soltani/Workspace/ad-robust/blob/ema_0.9999_003000.pt",
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()
