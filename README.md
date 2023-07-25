@@ -10,8 +10,8 @@ pip install -e .
 
 ## download and preprocess datasets
 ```
-python ./scripts/mvtec_ad_download.py --root path/to/root [--subset_name NAME]
-python ./scripts/preprocess_data.py --root path/to/root/mvtec_anomaly_dtection [--subset_name NAME]
+export PREPARE_DATA="[--subset_name SUBSET_NAME] [--root ROOT]"
+python scripts/prepare_data.py PREPARE_DATA
 ```
 
 ## train
