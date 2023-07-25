@@ -129,8 +129,9 @@ def main():
     pgd2_l2_truth_labels = []
     pgd_l_inf_predicted_labels = []
     pgd2_l_inf_truth_labels = []
+    s = args.mean_filter_size
     ad_score = ADScore(
-        mean_filter=(torch.ones((1, 1, 3, 3)) / 3 * 3).to(dist_util.dev())
+        mean_filter=(torch.ones((1, 1, s, s)) / s * s).to(dist_util.dev())
     )
     training_err_ms = torch.Tensor(training_err_ms).to(dist_util.dev())
     for i, (images, labels) in enumerate(test_data):
@@ -157,6 +158,7 @@ def main():
                 ad_score,
                 m_shot=args.m_shot,
                 k_step=args.k_steps,
+                epsilon=args.attack_strength,
                 N=args.attack_n,
                 alpha=args.attack_alpha,
                 norm='l2'
@@ -170,6 +172,7 @@ def main():
                 ad_score,
                 m_shot=args.m_shot,
                 k_step=args.k_steps,
+                epsilon=args.attack_strength,
                 N=args.attack_n,
                 alpha=args.attack_alpha,
                 norm='l_inf'
@@ -212,8 +215,9 @@ def create_argparser():
         model_path="/home/soltani/Workspace/ad-robust/blob/ema_0.9999_003000.pt",
         k_steps=50,
         m_shot=1,
+        mean_filter_size=3,
         anomaly_threshold=0.5,
-        attak_type="l2_pgd",
+        attack_type="l2_pgd",
         attack_strength=0.2,
         attack_n=10,
         attack_alpha=1e-2,
