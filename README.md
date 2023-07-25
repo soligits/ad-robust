@@ -4,8 +4,7 @@ Repository for the Robustness For Free: Adversarially Robust Anomaly Detection T
 ## installation
 
 ```
-pip install numpy scipy opencv-python scikit-learn tqdm blobfile mpi4py
-pip install torch torchvision
+pip install -r requirements.txt
 pip install -e .
 ```
 
