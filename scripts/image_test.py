@@ -20,10 +20,13 @@ from improved_diffusion.script_util import (
     args_to_dict,
 )
 from improved_diffusion.resample import create_named_schedule_sampler
+import torch
 
 from ad_utils.ad_score import anomaly_score, calculate_err_ms
 from ad_utils.reconstruct import arbitrary_shot_reconstruction
 from ad_utils.metrics import AUPR, AUROC
+from ad_utils.nn import ADScore
+from ad_utils.attacks import pgd_attack
 
 
 def main():
@@ -45,7 +48,7 @@ def main():
 
     logger.log("testing...")
 
-    training_err_ms = 0.0
+    training_err_ms = np.zeros((args.image_size, args.image_size))
     train_data = load_data(
         data_dir=args.train_dir,
         batch_size=args.batch_size,
@@ -55,7 +58,7 @@ def main():
     )
     train_len = len(os.listdir(args.train_dir))
     for i, (images, _) in enumerate(train_data):
-        if i >= train_len:
+        if i >= train_len / args.batch_size:
             break
         images = images.to(dist_util.dev())
         reconstructed_images = arbitrary_shot_reconstruction(
@@ -84,7 +87,35 @@ def main():
     predicted_labels = []
     true_labels = []
     for i, (images, labels) in enumerate(test_data):
-        if i >= test_len:
+        if i >= test_len / args.batch_size:
+            break
+        labels = labels["y"]
+        images = images.to(dist_util.dev())
+        labels = labels.to(dist_util.dev())
+        reconstructed_images = arbitrary_shot_reconstruction(
+            model,
+            diffusion,
+            images,
+            k_step=args.k_steps,
+            m_shot=args.m_shot,
+        )
+        for image, reconstructed, label in zip(images, reconstructed_images, labels):
+            image = image.permute(1, 2, 0)
+            reconstructed = reconstructed.permute(1, 2, 0)
+            image = image.cpu().detach().numpy()
+            reconstructed = reconstructed.cpu().detach().numpy()
+            if anomaly_score(image, reconstructed, training_err_ms) > args.anomaly_threshold:
+                predicted_labels.append(1)
+            else:
+                predicted_labels.append(0)
+            true_labels.append(label.cpu().detach().item())
+
+    pgd_l2_labels = []
+    pgd_l_inf_labels = []
+    ad_score = ADScore(mean_filter=(torch.ones((1, 1, 3, 3)) / 3*3).to(dist_util.dev()))
+    training_err_ms = torch.Tensor(training_err_ms).to(dist_util.dev())
+    for i, (images, labels) in enumerate(test_data):
+        if i >= test_len / args.batch_size:
             break
         labels = labels["y"]
         images = images.to(dist_util.dev())
@@ -98,20 +129,25 @@ def main():
         )
         # TODO: add l2_pgd attack
         for image, reconstructed, label in zip(images, reconstructed_images, labels):
-            image = image.permute(1, 2, 0)
-            reconstructed = reconstructed.permute(1, 2, 0)
-            image = image.cpu().detach().numpy()
-            reconstructed = reconstructed.cpu().detach().numpy()
-            if anomaly_score(image, reconstructed, training_err_ms) > args.anomaly_threshold:
+            image, reconstructed = pgd_attack(image, label, training_err_ms,  model, diffusion, ad_score, m_shot=args.m_shot, k_step=args.k_steps)
+            if ad_score(image, reconstructed, training_err_ms).cpu().item() > args.anomaly_threshold:
                 predicted_labels.append(1)
             else:
                 predicted_labels.append(0)
-            true_labels.append(label.cpu().detach().item())
     
     aupr = AUPR(true_labels, predicted_labels)
     auroc = AUROC(true_labels, predicted_labels)
+    aupr_l2 = AUPR(true_labels, pgd_l2_labels)
+    auroc_l2 = AUROC(true_labels, pgd_l2_labels)
+    aupr_l_inf = AUPR(true_labels, pgd_l_inf_labels)
+    auroc_l_inf = AUROC(true_labels, pgd_l_inf_labels)
+
     logger.log(f"AUPR: {aupr}")
     logger.log(f"AUROC: {auroc}")
+    logger.log(f"AUPR PGD_L2: {aupr_l2}")
+    logger.log(f"AUROC PGD_L2: {auroc_l2}")
+    logger.log(f"AUPR PGD_L_INF: {aupr_l_inf}")
+    logger.log(f"AUROC PGD_L_INF: {auroc_l_inf}")
 
     dist.barrier()
     logger.log("testing complete")
