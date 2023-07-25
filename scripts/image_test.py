@@ -51,13 +51,13 @@ def main():
 
     training_err_ms = np.zeros((args.image_size, args.image_size))
     train_data = load_data(
-        data_dir=args.train_dir,
+        data_dir=args.train_path,
         batch_size=args.batch_size,
         image_size=args.image_size,
         class_cond=False,
         deterministic=True,
     )
-    train_len = len(os.listdir(args.train_dir))
+    train_len = len(os.listdir(args.train_path))
     for i, (images, _) in enumerate(train_data):
         if i >= train_len / args.batch_size:
             break
@@ -81,13 +81,13 @@ def main():
     logger.log("Calculating standard AUC and AUPR on test data...")
 
     test_data = load_data(
-        data_dir=args.test_dir,
+        data_dir=args.test_path,
         batch_size=args.batch_size,
         image_size=args.image_size,
         class_cond=True,
         deterministic=True,
     )
-    test_len = len(os.listdir(args.test_dir))
+    test_len = len(os.listdir(args.test_path))
     predicted_labels = []
     true_labels = []
     for i, (images, labels) in enumerate(test_data):
@@ -125,8 +125,10 @@ def main():
     logger.log("Finish calculating standard AUC and AUPR on test data...")
     logger.log("Calculating robust AUC and AUPR on test data...")
 
-    pgd_l2_labels = []
-    pgd_l_inf_labels = []
+    pgd_l2_predicted_labels = []
+    pgd2_l2_truth_labels = []
+    pgd_l_inf_predicted_labels = []
+    pgd2_l_inf_truth_labels = []
     ad_score = ADScore(
         mean_filter=(torch.ones((1, 1, 3, 3)) / 3 * 3).to(dist_util.dev())
     )
@@ -155,8 +157,8 @@ def main():
                 ad_score,
                 m_shot=args.m_shot,
                 k_step=args.k_steps,
-                N=10,
-                alpha=1e-2,
+                N=args.attack_n,
+                alpha=args.attack_alpha,
                 norm='l2'
             )
             adv_l_inf, adv_recon_l_inf = pgd_attack(
@@ -168,29 +170,29 @@ def main():
                 ad_score,
                 m_shot=args.m_shot,
                 k_step=args.k_steps,
-                N=10,
-                alpha=1e-2,
+                N=args.attack_n,
+                alpha=args.attack_alpha,
                 norm='l_inf'
             )
             if (
                 ad_score(adv_l2, adv_recon_l2, training_err_ms).cpu().item()
                 > args.anomaly_threshold
             ):
-                pgd_l2_labels.append(1)
+                pgd_l2_predicted_labels.append(1)
             else:
-                pgd_l2_labels.append(0)
+                pgd_l2_predicted_labels.append(0)
             if (
                 ad_score(adv_l_inf, adv_recon_l_inf, training_err_ms).cpu().item()
                 > args.anomaly_threshold
             ):
-                pgd_l_inf_labels.append(1)
+                pgd_l_inf_predicted_labels.append(1)
             else:
-                pgd_l_inf_labels.append(0)
+                pgd_l_inf_predicted_labels.append(0)
 
-    aupr_l2 = AUPR(true_labels, pgd_l2_labels)
-    auroc_l2 = AUROC(true_labels, pgd_l2_labels)
-    aupr_l_inf = AUPR(true_labels, pgd_l_inf_labels)
-    auroc_l_inf = AUROC(true_labels, pgd_l_inf_labels)
+    aupr_l2 = AUPR(true_labels, pgd_l2_predicted_labels)
+    auroc_l2 = AUROC(true_labels, pgd_l2_predicted_labels)
+    aupr_l_inf = AUPR(true_labels, pgd_l_inf_predicted_labels)
+    auroc_l_inf = AUROC(true_labels, pgd_l_inf_predicted_labels)
     logger.log(f"AUPR PGD_L2: {aupr_l2}")
     logger.log(f"AUROC PGD_L2: {auroc_l2}")
     logger.log(f"AUPR PGD_L_INF: {aupr_l_inf}")
@@ -204,8 +206,8 @@ def main():
 
 def create_argparser():
     defaults = dict(
-        train_dir="/home/soltani/Workspace/ad-robust/data/mvtec_anomaly_detection/bottle/train/good",
-        test_dir="/home/soltani/Workspace/ad-robust/data/mvtec_anomaly_detection/bottle/test",
+        train_path="/home/soltani/Workspace/ad-robust/data/mvtec_anomaly_detection/bottle/train",
+        test_path="/home/soltani/Workspace/ad-robust/data/mvtec_anomaly_detection/bottle/test",
         batch_size=1,
         model_path="/home/soltani/Workspace/ad-robust/blob/ema_0.9999_003000.pt",
         k_steps=50,
@@ -213,6 +215,8 @@ def create_argparser():
         anomaly_threshold=0.5,
         attak_type="l2_pgd",
         attack_strength=0.2,
+        attack_n=10,
+        attack_alpha=1e-2,
         clip_denoised=True,
         use_ddim=False,
     )

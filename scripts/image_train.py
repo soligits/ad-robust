@@ -86,7 +86,7 @@ def create_argparser():
             lr=1e-4,
             lr_anneal_steps=30000,
             image_size=256,
-            num_channels=128,
+            num_channels=64,
             num_heads=1,
             attention_resolutions="8",
             diffusion_steps=1000,
