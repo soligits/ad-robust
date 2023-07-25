@@ -10,8 +10,8 @@ pip install -e .
 
 ## download and preprocess datasets
 ```
-PREPARE_DATA="[--subset_name SUBSET_NAME] [--root ROOT]"
-python scripts/prepare_data.py PREPARE_DATA
+PREPARE_DATA_FLAGS="[--subset_name SUBSET_NAME] [--root ROOT]"
+python scripts/prepare_data.py PREPARE_DATA_FLAGS
 ```
 
 ## train
