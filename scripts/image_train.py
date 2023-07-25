@@ -71,26 +71,27 @@ def create_argparser():
         fp16_scale_growth=1e-3,
     )
     defaults.update(model_and_diffusion_defaults())
+
+    
     defaults.update(
         dict(
             data_dir=os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "..",
-                "data",
-                "mvtec_anomaly_detection",
-                "bottle",
-                "train",
-                "good",
-            ),
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "..",
+                    "data",
+                    "mvtec_anomaly_detection",
+                    "bottle",
+                    "train"
+                ),
             lr=1e-4,
+            lr_anneal_steps=30000,
             image_size=256,
-            num_channels=64,
+            num_channels=128,
             num_heads=1,
             attention_resolutions="8",
             diffusion_steps=1000,
             noise_schedule="linear",
             batch_size=2,
-            lr_anneal_steps=3000,
         )
     )
     parser = argparse.ArgumentParser()
