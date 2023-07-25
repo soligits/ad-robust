@@ -29,24 +29,22 @@ def pgd_attack(
     adversary.requires_grad = True
     model.train()
     y = -1 if y == 1 else 1
-    with tqdm(enumerate(range(N))) as pbar:
-        for _,n in pbar:
-            reconstruction = arbitrary_shot_reconstruction(
-                model, diffusion, adversary.unsqueeze(dim=0), m_shot=m_shot, k_step=k_step, requires_grad=True
-            ).squeeze(dim=0)
-            assert adversary.shape == reconstruction.shape
-            score = ad_score(adversary, reconstruction, t)
-            score.backward()
-            new_adversary = None
-            ord = 2 if norm == "l2" else float("inf")
-            if ord == 2:
-                new_adversary = adversary + alpha * y * adversary.grad / vector_norm(adversary.grad)
-            else:
-                new_adversary = adversary + alpha * torch.sgn(y * adversary.grad)
-            new_adversary = projection(adversary.detach(), new_adversary.detach(), epsilon, ord)
-            adversary = new_adversary
-            adversary.requires_grad = True
-            pbar.set_description(f'Generating adversarial example x_{n + 1} with norm {norm}')
+    for n in range(N):
+        reconstruction = arbitrary_shot_reconstruction(
+            model, diffusion, adversary.unsqueeze(dim=0), m_shot=m_shot, k_step=k_step, requires_grad=True
+        ).squeeze(dim=0)
+        assert adversary.shape == reconstruction.shape
+        score = ad_score(adversary, reconstruction, t)
+        score.backward()
+        new_adversary = None
+        ord = 2 if norm == "l2" else float("inf")
+        if ord == 2:
+            new_adversary = adversary + alpha * y * adversary.grad / vector_norm(adversary.grad)
+        else:
+            new_adversary = adversary + alpha * torch.sgn(y * adversary.grad)
+        new_adversary = projection(adversary.detach(), new_adversary.detach(), epsilon, ord)
+        adversary = new_adversary
+        adversary.requires_grad = True
 
     adversary = adversary.detach()
     assert adversary.shape == x.shape

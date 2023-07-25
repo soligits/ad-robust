@@ -86,9 +86,9 @@ def main():
 
     logger.log("testing...")
 
-    logger.log("Calculating multiscale error on training data...")
+    logger.log("Calculating multiscale error on train data...")
     training_err_ms = calculate_train_err_ms(args, model, diffusion, ad_score)
-    logger.log("Finished calculating multiscale error on training data...")
+    logger.log("Finished calculating multiscale error on train data...")
 
     logger.log("Calculating standard AUC on test data...")
 
@@ -153,7 +153,6 @@ def main():
         images = images.to(dist_util.dev())
         labels = labels.to(dist_util.dev())
         reconstructed_images = reconstruct(images)
-        # TODO: add l2_pgd attack
         for image, reconstructed, label in zip(images, reconstructed_images, labels):
             adv, adv_recon = attack(image, label)
             score = ad_score(adv, adv_recon, training_err_ms).cpu().item()

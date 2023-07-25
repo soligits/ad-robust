@@ -26,11 +26,10 @@ def arbitrary_shot_reconstruction(
     k_step=50,
     requires_grad=False
 ):
+    model.train()
     if requires_grad:
-        model.train()
         return _reconstruct(model, diffusion, x_0, m_shot, k_step)
     else:
-        model.eval()
         with th.no_grad():
             return _reconstruct(model, diffusion, x_0, m_shot, k_step)
 
