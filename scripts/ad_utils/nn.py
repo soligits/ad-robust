@@ -10,8 +10,7 @@ class ADScore(nn.Module):
         self.mean_filter = mean_filter
         self.scale_factors = scale_factors
 
-
-    def forward(self, x1: torch.Tensor, x2: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def _calculate_err_ms(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
         multi_scale_err = None
         for k in self.scale_factors:
             s1 = resize(x1, [x1.shape[1] // k, x1.shape[2] // k], antialias=True    )
@@ -24,4 +23,8 @@ class ADScore(nn.Module):
                 multi_scale_err += err
         multi_scale_err /= len(self.scale_factors)
         multi_scale_err = torch.squeeze(F.conv2d(torch.unsqueeze(multi_scale_err, dim=0), self.mean_filter, padding='same'), dim=0)
+        return multi_scale_err
+
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        multi_scale_err = self._calculate_err_ms(x1, x2)
         return torch.max(torch.abs(multi_scale_err - t))

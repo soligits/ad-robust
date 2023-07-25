@@ -2,13 +2,18 @@
 Generate a large batch of image samples from a model and save them as a large
 numpy array. This can be used to produce samples for FID evaluation.
 """
-
+import functools
 import argparse
 import os
+
+import matplotlib.pyplot as plt
 
 import numpy as np
 import torch as th
 import torch.distributed as dist
+import torch
+
+from sklearn.metrics import roc_auc_score
 
 from improved_diffusion import dist_util, logger
 from improved_diffusion.image_datasets import load_data
@@ -19,14 +24,42 @@ from improved_diffusion.script_util import (
     add_dict_to_argparser,
     args_to_dict,
 )
-from improved_diffusion.resample import create_named_schedule_sampler
 import torch
 
-from ad_utils.ad_score import anomaly_score, calculate_err_ms
 from ad_utils.reconstruct import arbitrary_shot_reconstruction
-from ad_utils.metrics import AUPR, AUROC
 from ad_utils.nn import ADScore
 from ad_utils.attacks import pgd_attack
+
+
+def calculate_train_err_ms(args, model, diffusion, ad_score):
+    train_data = load_data(
+        data_dir=args.train_path,
+        batch_size=args.batch_size,
+        image_size=args.image_size,
+        class_cond=False,
+        deterministic=True,
+    )
+    train_len = len(os.listdir(args.train_path))
+    training_err_ms = torch.zeros((args.image_size, args.image_size)).to(
+        dist_util.dev()
+    )
+
+    for i, (images, _) in enumerate(train_data):
+        if i >= train_len / args.batch_size:
+            break
+        images = images.to(dist_util.dev())
+        reconstructed_images = arbitrary_shot_reconstruction(
+            model,
+            diffusion,
+            images,
+            k_step=args.k_steps,
+            m_shot=args.m_shot,
+        )
+        for image, reconstructed in zip(images, reconstructed_images):
+            training_err_ms += ad_score._calculate_err_ms(image, reconstructed)
+    training_err_ms /= train_len
+
+    return training_err_ms
 
 
 def main():
@@ -46,39 +79,18 @@ def main():
 
     model.eval()
 
-    logger.log("testing...")
-    logger.log("Calculating multiscale error on training data...")
-
-    training_err_ms = np.zeros((args.image_size, args.image_size))
-    train_data = load_data(
-        data_dir=args.train_path,
-        batch_size=args.batch_size,
-        image_size=args.image_size,
-        class_cond=False,
-        deterministic=True,
+    s = args.mean_filter_size
+    ad_score = ADScore(
+        mean_filter=(torch.ones((1, 1, s, s)) / s * s).to(dist_util.dev())
     )
-    train_len = len(os.listdir(args.train_path))
-    for i, (images, _) in enumerate(train_data):
-        if i >= train_len / args.batch_size:
-            break
-        images = images.to(dist_util.dev())
-        reconstructed_images = arbitrary_shot_reconstruction(
-            model,
-            diffusion,
-            images,
-            k_step=args.k_steps,
-            m_shot=args.m_shot,
-        )
-        for image, reconstructed in zip(images, reconstructed_images):
-            image = image.permute(1, 2, 0)
-            reconstructed = reconstructed.permute(1, 2, 0)
-            image = image.cpu().detach().numpy()
-            reconstructed = reconstructed.cpu().detach().numpy()
-            training_err_ms += calculate_err_ms(image, reconstructed)
-    training_err_ms /= train_len
 
+    logger.log("testing...")
+
+    logger.log("Calculating multiscale error on training data...")
+    training_err_ms = calculate_train_err_ms(args, model, diffusion, ad_score)
     logger.log("Finished calculating multiscale error on training data...")
-    logger.log("Calculating standard AUC and AUPR on test data...")
+
+    logger.log("Calculating standard AUC on test data...")
 
     test_data = load_data(
         data_dir=args.test_path,
@@ -88,120 +100,70 @@ def main():
         deterministic=True,
     )
     test_len = len(os.listdir(args.test_path))
-    predicted_labels = []
-    true_labels = []
-    for i, (images, labels) in enumerate(test_data):
-        if i >= test_len / args.batch_size:
-            break
-        labels = labels["y"]
-        images = images.to(dist_util.dev())
-        labels = labels.to(dist_util.dev())
-        reconstructed_images = arbitrary_shot_reconstruction(
+
+    reconstruct = lambda x_0: arbitrary_shot_reconstruction(
             model,
             diffusion,
-            images,
+            x_0,
             k_step=args.k_steps,
             m_shot=args.m_shot,
-        )
-        for image, reconstructed, label in zip(images, reconstructed_images, labels):
-            image = image.permute(1, 2, 0)
-            reconstructed = reconstructed.permute(1, 2, 0)
-            image = image.cpu().detach().numpy()
-            reconstructed = reconstructed.cpu().detach().numpy()
-            if (
-                anomaly_score(image, reconstructed, training_err_ms)
-                > args.anomaly_threshold
-            ):
-                predicted_labels.append(1)
-            else:
-                predicted_labels.append(0)
-            true_labels.append(label.cpu().detach().item())
-
-    aupr = AUPR(true_labels, predicted_labels)
-    auroc = AUROC(true_labels, predicted_labels)
-
-    logger.log(f"AUPR: {aupr}")
-    logger.log(f"AUROC: {auroc}")
-    logger.log("Finish calculating standard AUC and AUPR on test data...")
-    logger.log("Calculating robust AUC and AUPR on test data...")
-
-    pgd_l2_predicted_labels = []
-    pgd2_l2_truth_labels = []
-    pgd_l_inf_predicted_labels = []
-    pgd2_l_inf_truth_labels = []
-    s = args.mean_filter_size
-    ad_score = ADScore(
-        mean_filter=(torch.ones((1, 1, s, s)) / s * s).to(dist_util.dev())
+            requires_grad=False,
     )
-    training_err_ms = torch.Tensor(training_err_ms).to(dist_util.dev())
+        
+    true_labels = []
+    predicted_scores = []
     for i, (images, labels) in enumerate(test_data):
         if i >= test_len / args.batch_size:
             break
         labels = labels["y"]
         images = images.to(dist_util.dev())
         labels = labels.to(dist_util.dev())
-        reconstructed_images = arbitrary_shot_reconstruction(
-            model,
-            diffusion,
-            images,
-            k_step=args.k_steps,
-            m_shot=args.m_shot,
-        )
+        reconstructed_images = reconstruct(images)
+        for image, reconstructed, label in zip(images, reconstructed_images, labels):
+            score = ad_score(image, reconstructed, training_err_ms).cpu().detach().item()
+            true_labels.append(label.cpu().detach().item())
+            predicted_scores.append(score)
+
+    auc = roc_auc_score(true_labels, predicted_scores)
+    logger.log(f"AUC: {auc}")
+    logger.log("Finish calculating standard AUC on test data...")
+
+
+    logger.log("Calculating robust AUC on test data...")
+    attack = lambda x, y: pgd_attack(
+                x,
+                y,
+                training_err_ms,
+                model,
+                diffusion,
+                ad_score,
+                m_shot=args.m_shot,
+                k_step=args.k_steps,
+                epsilon=args.attack_strength,
+                N=args.attack_n,
+                alpha=args.attack_alpha,
+                norm= "l2" if args.attack_type == "l2_pgd" else "l_inf",
+            )
+
+    pgd_predicted_scores = []
+    for i, (images, labels) in enumerate(test_data):
+        if i >= test_len / args.batch_size:
+            break
+        labels = labels["y"]
+        images = images.to(dist_util.dev())
+        labels = labels.to(dist_util.dev())
+        reconstructed_images = reconstruct(images)
         # TODO: add l2_pgd attack
         for image, reconstructed, label in zip(images, reconstructed_images, labels):
-            adv_l2, adv_recon_l2 = pgd_attack(
-                image,
-                label,
-                training_err_ms,
-                model,
-                diffusion,
-                ad_score,
-                m_shot=args.m_shot,
-                k_step=args.k_steps,
-                epsilon=args.attack_strength,
-                N=args.attack_n,
-                alpha=args.attack_alpha,
-                norm='l2'
-            )
-            adv_l_inf, adv_recon_l_inf = pgd_attack(
-                image,
-                label,
-                training_err_ms,
-                model,
-                diffusion,
-                ad_score,
-                m_shot=args.m_shot,
-                k_step=args.k_steps,
-                epsilon=args.attack_strength,
-                N=args.attack_n,
-                alpha=args.attack_alpha,
-                norm='l_inf'
-            )
-            if (
-                ad_score(adv_l2, adv_recon_l2, training_err_ms).cpu().item()
-                > args.anomaly_threshold
-            ):
-                pgd_l2_predicted_labels.append(1)
-            else:
-                pgd_l2_predicted_labels.append(0)
-            if (
-                ad_score(adv_l_inf, adv_recon_l_inf, training_err_ms).cpu().item()
-                > args.anomaly_threshold
-            ):
-                pgd_l_inf_predicted_labels.append(1)
-            else:
-                pgd_l_inf_predicted_labels.append(0)
+            adv, adv_recon = attack(image, label)
+            score = ad_score(adv, adv_recon, training_err_ms).cpu().item()
+            pgd_predicted_scores.append(score)
 
-    aupr_l2 = AUPR(true_labels, pgd_l2_predicted_labels)
-    auroc_l2 = AUROC(true_labels, pgd_l2_predicted_labels)
-    aupr_l_inf = AUPR(true_labels, pgd_l_inf_predicted_labels)
-    auroc_l_inf = AUROC(true_labels, pgd_l_inf_predicted_labels)
-    logger.log(f"AUPR PGD_L2: {aupr_l2}")
-    logger.log(f"AUROC PGD_L2: {auroc_l2}")
-    logger.log(f"AUPR PGD_L_INF: {aupr_l_inf}")
-    logger.log(f"AUROC PGD_L_INF: {auroc_l_inf}")
 
-    logger.log("Finish calculating robust AUC and AUPR on test data...")
+    pgd_auc = roc_auc_score(true_labels, pgd_predicted_scores)
+    logger.log(f"AUC {args.attack_type}: {pgd_auc}")
+
+    logger.log("Finish calculating robust AUC on test data...")
 
     dist.barrier()
     logger.log("testing complete")
